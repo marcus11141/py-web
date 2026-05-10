@@ -1,0 +1,1 @@
+window.option_add("*font", ("Helvetica", font_size))
