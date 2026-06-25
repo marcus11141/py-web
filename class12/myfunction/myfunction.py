@@ -16,9 +16,9 @@ class WeatherAPI:
         self.api_key = api_key  # api_key 是天氣網站辨認身分用的金鑰
         self.unit = "metric"
         self.lang = lang
-        self.base_url = "https://api.openweathermap.org/data/2.5/weather"
+        self.base_url = "https://api.openweathermap.org/data/2.5/weather?"
         # 目前天氣API的網址前半段
-        self.forecast_url = "https://api.openweathermap.org/data/2.5/forecast"
+        self.forecast_url = "https://api.openweathermap.org/data/2.5/forecast?"
         self.icon_url = "https://openweathermap.org/img/wn/"
         # 天氣圖示網址前半段
 
@@ -32,7 +32,7 @@ class WeatherAPI:
 
     def get_icon_url(self, icon_code):
         # 組出天氣圖示網址
-        return f"{self.icon_base_url}{icon_code}@2x.png"
+        return f"{self.icon_url}{icon_code}@2x.png"
 
     def get_weather_summary(self, city_name):
         info = self.get_current_weather(city_name)
