@@ -1,5 +1,6 @@
 #############################################匯入模組##############################################
 import requests
+import openai
 
 
 #############################################定義類別##############################################
@@ -78,7 +79,7 @@ class WeatherAPI:
             if response is not None and response.status_code == 404:
                 return None  # 找不到城市
             raise  # 其他HTTP錯誤繼續往外丟
-        if "city" in info or "list" not in info:
+        if "city" not in info or "list" not in info:
             return None  # 沒有拿到預報資料
 
         city_label = info["city"].get("name", city_name)
@@ -94,5 +95,51 @@ class WeatherAPI:
                     "icon_code": forecast["weather"][0]["icon"],
                 }
             )
-
+        print(f"已整理 {len(forecast_summary)} 筆 {city_label} 的天氣預報資料")
         return forecast_summary
+
+
+class AIAssistant:
+    """把 OpenAI 的查詢流程整理成可重複使用的工具類別"""
+
+    def __init__(self, api_key):
+        self.api_key = api_key
+        openai.api_key = api_key
+
+    def ask(
+        self,
+        system_prompt,
+        user_message,
+        history_messages=None,
+        temperature=0.2,
+        model="gpt-4o",
+    ):
+        if not self.api_key:
+            return None, "尚未設定OPENAI_API_KEY, 請先在 .env檔裡設定。"
+
+        if history_messages is None:
+            history_messages = []
+
+        messages = (
+            [{"role": "system", "content": system_prompt}]
+            + history_messages
+            + [{"role": "user", "content": user_message}]
+        )
+
+        print("== 傳給 OpenAI 的訊息 ==")
+        for msg in messages:
+            print(f"{msg['role']}: {msg['content']}")
+        print("=============================")
+
+        try:
+            response = openai.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+            )
+            assistant_message = response.choices[0].message.content
+
+            return assistant_message, None
+
+        except Exception as e:
+            return None, f"發生錯誤: {e}"

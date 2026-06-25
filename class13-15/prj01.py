@@ -4,7 +4,7 @@
 import os
 import asyncio
 import requests
-from myfunction.myfunction import WeatherAPI
+from myfunction.myfunction import WeatherAPI, AIAssistant
 import discord  # pip install -U discord.py :這個套件負責跟discord溝通
 from dotenv import (
     load_dotenv,
@@ -26,6 +26,7 @@ bot = discord.Client(intents=intents)
 tree = discord.app_commands.CommandTree(bot)
 
 weather_api = WeatherAPI(os.getenv("OPENWEATHER_API_KEY"))
+ai_assistant = AIAssistant(os.getenv("OPENAI_API_KEY"))
 
 
 def build_weather_embed(weather_summary):
@@ -46,27 +47,27 @@ def build_weather_embed(weather_summary):
 
 
 def build_forecast_embeds(forecast_summary):
-    """把未來多筆預報資料排成Discord卡片清單"""
-    # forecast_summary裡每一筆都是同一座城市、不同時間點的天氣資料
-    # 這個函式會把他們一筆一筆做成卡片, 最後回傳一個清單
+    """把未來多筆預報資料排成 Discord 卡片清單。"""
+    # forecast_summary 裡每一筆都是同一座城市、不同時間點的天氣資料。
+    # 這個函式會把它們一筆一筆做成卡片，最後回傳一個清單。
     embeds = []
-
     for forecast in forecast_summary:
+        # 這裡每跑一次迴圈，就建立一張新的預報卡片。
         embed = discord.Embed(
-            title=f"{forecast['city_name']} 天氣預報  - {forecast['date_time']}",
-            description=f"描述: {forecast['description']}",
-            color=discord.Color.from_str("1E90FF"),
+            title=f"{forecast['city_name']} 天氣預報 - {forecast['date_time']}",
+            description=f"描述：{forecast['description']}",
+            color=discord.Colour.from_str("#1E90FF"),
         )
-
-        # forecast的 icon_code 也是 WeatherAPI 整理好的資料,可以拿來組圖示網址
+        # forecast 的 icon_code 也是 WeatherAPI 整理好的資料，可以直接拿來組圖示網址
         icon_url = weather_api.get_icon_url(forecast["icon_code"])
         embed.set_thumbnail(url=icon_url)
         embed.add_field(
             name="溫度",
-            value=f"{forecast['temerature_celsius']} °C",
+            value=f"{forecast['temperature_celsius']}°C",
             inline=False,  # 單獨一行顯示，卡片內容會比較整齊
         )
         embeds.append(embed)
+
     return embeds
 
 
@@ -105,7 +106,12 @@ async def hello(interaction: discord.Interaction):
 
 
 @tree.command(name="weather", description="取得當前天氣資訊")
-async def weather(interaction: discord.Interaction, city: str, forecast: bool = False):
+async def weather(
+    interaction: discord.Interaction,
+    city: str,
+    forecast: bool = False,
+    ai: bool = False,
+):
     """輸入/weather [城市名稱]，機器人會回應該城市的天氣資訊"""
     await interaction.response.defer()  # 告訴Discord我們正在處理，避免超時
     city = city.strip()  # 去除前後空白
@@ -124,15 +130,29 @@ async def weather(interaction: discord.Interaction, city: str, forecast: bool = 
             embed = build_weather_embed(weather_summary)
             await interaction.followup.send(embed=embed)
             return
+
+        if not ai:
+            forecast_summary = weather_api.get_forecast_summary(city)
+            if forecast_summary is None:
+                await interaction.followup.send(f"找不到 ***{city}*** 的天氣預報資訊")
+                return
+            embeds = build_forecast_embeds(forecast_summary)
+            await interaction.followup.send(embeds=embeds[:10])
+            # Discord限制一次最多只能送10張卡片
+            return
+        raw_forecast = weather_api.get_forecast(city)
     except (requests.RequestException, KeyError) as e:
         await interaction.followup.send("目前無法取得天氣資訊，請稍後再試。")
         return
-    if weather_summary is None:
-        await interaction.followup.send(f"找不到 ***{city}*** 的天氣資訊")
-        return
 
-    embed = build_weather_embed(weather_summary)
-    await interaction.followup.send(embed=embed)
+    analysis, error = ai_assistant.ask(
+        system_prompt="你是一個天氣分析師，請根據提供的天氣預報資料，整理出未來幾天的天氣趨勢、溫度變化和重要天氣事件。",
+        user_message=f"請分析以下天氣預報資料:\n{raw_forecast}",
+    )
+    if error:
+        await interaction.followup.send(f"分析天氣資料時發生錯誤: {error}")
+    else:
+        await interaction.followup.send(f"**{city}** 的天氣分析結果:\n{analysis}")
 
 
 def main():
